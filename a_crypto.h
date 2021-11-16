@@ -99,15 +99,15 @@ typedef struct
     u32 tls_nid;
     u32 openssl_nid;
     u32 key_len;
-    u32 iv_len;
-    u32 block_size;
-    u32 md_nid;
-    u32 flag;
-    u32 sign;
-    s32 (*parse_cke)(void *arg, u8 *in, u32 in_len);
+    u32 iv_len; //
+    u32 block_size; //
+    u32 md_nid; // 
+    u32 flag; //这个cipher的特性
+    u32 sign; //签名算法 是EC 还是RSA 这是一个总的标志 对应主 index 再对应 
+    s32 (*parse_cke)(void *arg, u8 *in, u32 in_len); //生成主密钥 a_tls_process_cke_ecdh
     s32 (*gen_ske)(void *arg, u8 *out, u32 *out_len);
-    s32 (*enc)(void *arg, crypto_info_t *info);
-    s32 (*dec)(void *arg, crypto_info_t *info);
+    s32 (*enc)(void *arg, crypto_info_t *info); //用于传输数据的时候的加密
+    s32 (*dec)(void *arg, crypto_info_t *info); // 用于传输数据的时候的解密
 
     /*need init*/
     const void *cipher;//EVP_CIPHER

@@ -6,7 +6,7 @@ u8 a_tls_tmp_ciphertext_buf[16384];
 u8 a_tls_tmp_msg_read_buf[16384];
 u8 am_cnt[16384] = {0};
 
-/*for TLS 1.2's default sig*/
+/*for TLS 1.2's default sig*/ //要么rsa 要么ec 应该是1.2 只支持EC和 RSA 签名
 sigalg_pair_t g_sig_default_single[] =
 {
     {
@@ -15,8 +15,8 @@ sigalg_pair_t g_sig_default_single[] =
         A_CRYPTO_NID_RSA,
         A_CRYPTO_NID_SHA1,
         0,0,
-        A_CRYPTO_RSA_PADDING_PKCS1,
-        a_crypto_rsa_sign
+        A_CRYPTO_RSA_PADDING_PKCS1, //light_rsa_add_pkcs1_padding(md, in, in_len, encode, *out_len);
+        a_crypto_rsa_sign //RSA_private_encrypt(*out_len, encode, out, rsa, RSA_NO_PADDING)
     },
 
     {
@@ -30,7 +30,7 @@ sigalg_pair_t g_sig_default_single[] =
     }
 };
 
-/*for < TLS 1.2 or GM*/
+/*for < TLS 1.2 or GM*/ //和索引对应 默认的签名算法 对应私钥
 sigalg_pair_t g_sig_default[] =
 {
     {
@@ -74,7 +74,7 @@ sigalg_pair_t g_sig_default[] =
     }
 };
 
-/*For client supporting sig_alg*/
+/*For client supporting sig_alg*/  //客户端扩展发来的
 sigalg_pair_t g_sigalg_pair[A_TLS_MAX_SIG_ALG] =
 {
     /*sentinel*/
@@ -345,6 +345,7 @@ void a_tls_prf(a_tls_t *tls, u8 *buf, u32 buf_len, u8 *sec, u32 sec_len, u8 *out
     u16 version = tls->handshake_version;
 
     if (IS_TLSGM(tls)) {
+        // out1 为输出
         a_crypto_phash(tls->sess->md, sec, sec_len, buf, buf_len, out1, olen);
         return;
     }
@@ -375,7 +376,7 @@ void a_tls_prf(a_tls_t *tls, u8 *buf, u32 buf_len, u8 *sec, u32 sec_len, u8 *out
         }
     }
 }
-
+// pms = pre master secret
 s32 a_tls_gen_master_secret(a_tls_t *tls, u8 *pms, u32 pms_len)
 {
     u8 buf[A_TLS_MASTER_KEY_BUF_LEN], buf_tmp[A_TLS_MASTER_KEY_BUF_LEN];
@@ -393,7 +394,9 @@ s32 a_tls_gen_master_secret(a_tls_t *tls, u8 *pms, u32 pms_len)
 
     memcpy(p, tls->handshake->srv_random, A_TLS_RAND_SIZE);
     memset(tls->sess->master_secret, 0, sizeof(tls->sess->master_secret));
-
+    //tls->sess->master_secret 为输出
+    //主密钥生成步骤 
+    // master_secret = PRF(pre_master_secret, "master secret",ClientHello.random + ServerHello.random) [0..47];
     a_tls_prf(tls, buf, sizeof(buf), pms, pms_len, tls->sess->master_secret, buf_tmp, A_TLS_MASTER_KEY_LEN);
 
     return A_TLS_OK;
@@ -425,7 +428,7 @@ sigalg_pair_t * a_tls_select_sigalg(a_tls_t *tls, void **key, a_md_t **md)
         goto end;
     }
 
-    if (tls->version == A_TLS_TLS_1_2_VERSION
+    if (tls->version == A_TLS_TLS_1_2_VERSION //TLS1.2 选cipher的时候 只能选择 0 和 1 的证书
         || sign == A_CRYPTO_NID_EC)
     {
         ret = &g_sig_default_single[index];
@@ -728,7 +731,7 @@ restart:
     if (tls->read_state == A_TLS_READ_HEAD) {
         u8 *pos = tls->cache;
         u16 version;
-        if (*pos != A_TLS_RT_CCS
+        if (*pos != A_TLS_RT_CCS //record type
             && *pos != A_TLS_RT_ALERT
             && *pos != A_TLS_RT_HANDHSHAKE
             && *pos != A_TLS_RT_APPLICATION_DATA)
@@ -794,7 +797,7 @@ restart:
         msg->rt_type= A_TLS_RT_CCS;
         return A_TLS_OK;
     }
-
+    ///这里进行解密
     if (tls->read_ctx) {
         crypto_info.p       = start_buf;
         crypto_info.c       = start_buf;
@@ -1104,12 +1107,12 @@ s32 a_tls_process_cke_ecc(void *arg, u8 *in, u32 in_len)
     key = tls->cfg->pkey[A_CRYPTO_NID_SM];
 
     info.async.key = key;
-    info.async.tbs = p;
+    info.async.tbs = p; //公钥
     info.async.tbs_len = pms_len;
     info.async.out = pms;
     info.async.out_len = &pms_len;
 
-    ret = a_crypto_sm2_dec(NULL, &info);
+    ret = a_crypto_sm2_dec(NULL, &info);//获得预主密钥
     if (ret != A_TLS_OK) {
         return ret;
     }
@@ -1175,7 +1178,7 @@ s32 a_tls_process_cke_ecdh(void *arg, u8 *in, u32 in_len)
         a_tls_error(tls, "tls ecdhe len dec err:%d", in_len);
         return A_TLS_ERR;
     }
-
+    //共享密钥的计算结果就是pms
     a_crypto_calc_ec_shared(tls->support_gp,
         hs->self_ecdh_prv,
         hs->self_ecdh_prv_len,
@@ -1210,6 +1213,7 @@ s32 a_tls_construct_srv_hello(a_tls_t *tls,  u8 *buf)
     u8 *p = buf;
 
     s2n(tls->handshake_version, p);
+
     memcpy(p ,tls->handshake->srv_random, A_TLS_RAND_SIZE);
     p += A_TLS_RAND_SIZE;
 
@@ -1243,7 +1247,7 @@ s32 a_tls_cipher_get(a_tls_t *tls, u8 *ciphers, u32 ciphers_len)
     u16 cipher_nid;
     a_cipher_t *c;
 
-    if (ciphers_len&1) {
+    if (ciphers_len & 1) {
         a_tls_error(tls, "tls ciphers len err:%d", ciphers_len);
         return A_TLS_ERR;
     }
@@ -1534,8 +1538,8 @@ void *a_tls_new(a_tls_cfg_t *cfg)
     ret->cfg        = cfg;
     ret->state_proc = tls_state_proc;
     ret->spec       = &tls_spec;
-    ret->support_gp = a_crypto_get_group_by_tls_id(A_CRYPTO_GROUP_ID_SECP256R1);
-
+    // ret->support_gp = a_crypto_get_group_by_tls_id(A_CRYPTO_GROUP_ID_SECP256R1);
+    ret->support_gp = a_crypto_get_group_by_tls_id(A_CRYPTO_GROUP_ID_SECP384R1);
     a_tls_cfg_check_cert(cfg);
 
     return ret;
@@ -1669,7 +1673,7 @@ s32 a_tls_gen_tls_cert(a_tls_cfg_t *cfg, X509 **certs, u32 cert_index, s32 num, 
     /*FOR TLS1.3, we have to add extension for each certificate in chain*/
 
     for(i = 0; i < idx; i++) {
-
+        //DER 
         len = i2d_X509(sorted[i], NULL);
         p = cfg->der[cert_index][i] = a_tls_malloc(len);
         if (p == NULL) {
@@ -1692,7 +1696,7 @@ s32 a_tls_gen_tls_cert(a_tls_cfg_t *cfg, X509 **certs, u32 cert_index, s32 num, 
     return 1;
 }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10101003L
+// #if OPENSSL_VERSION_NUMBER >= 0x10101003L
 s32 a_tls_cfg_set_sign_key(a_tls_cfg_t *cfg, s8 *path)
 {
     const EC_GROUP *grp = NULL;
@@ -1775,18 +1779,18 @@ s32 a_tls_cfg_set_sign_cert(a_tls_cfg_t *cfg, s8 *path)
     cfg->sign_der_len = len;
     return 1;
 }
-#else
-s32 a_tls_cfg_set_sign_cert(a_tls_cfg_t *cfg, s8 *path)
-{
-    printf("GM SSL need libcrypto.1.1\n");
-    return 0;
-}
-s32 a_tls_cfg_set_sign_key(a_tls_cfg_t *cfg, s8 *path)
-{
-    printf("GM SSL need libcrypto.1.1\n");
-    return 0;
-}
-#endif
+// #else
+// s32 a_tls_cfg_set_sign_cert(a_tls_cfg_t *cfg, s8 *path)
+// {
+//     printf("GM SSL need libcrypto.1.1\n");
+//     return 0;
+// }
+// s32 a_tls_cfg_set_sign_key(a_tls_cfg_t *cfg, s8 *path)
+// {
+//     printf("GM SSL need libcrypto.1.1\n");
+//     return 0;
+// }
+// #endif
 
 s32 a_tls_cfg_set_cert(a_tls_cfg_t *cfg, s8 *path)
 {

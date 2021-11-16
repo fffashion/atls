@@ -64,7 +64,8 @@ s32 a_tls13_dec_gcm_openssl(void *arg, crypto_info_t *info)
                                 EVP_CTRL_GCM_SET_TAG,
                                 EVP_GCM_TLS_TAG_LEN,
                                 c + c_len - EVP_GCM_TLS_TAG_LEN)
-        || !EVP_CipherUpdate(tls->read_ctx, NULL, &tmplen, header, sizeof(header))
+        || 
+!EVP_CipherUpdate(tls->read_ctx, NULL, &tmplen, header, sizeof(header))
         || !EVP_CipherUpdate(tls->read_ctx, tmpbuf, &len, c, c_len - EVP_GCM_TLS_TAG_LEN)
         || !EVP_CipherFinal_ex(tls->read_ctx, tmpbuf, &tmplen))
     {
@@ -467,10 +468,10 @@ s32 a_tls_dec_gcm_openssl(void *arg, crypto_info_t *info)
        }
 #endif
         /*Set ADD for GCM*/
-        EVP_CIPHER_CTX_ctrl(tls->read_ctx, EVP_CTRL_AEAD_TLS1_AAD, sizeof(add), add);
+        EVP_CIPHER_CTX_ctrl(tls->read_ctx, EVP_CTRL_AEAD_TLS1_AAD, sizeof(add), add);//解密
     }
 
-    ret = EVP_Cipher(tls->read_ctx, c, c, c_len);
+    ret = EVP_Cipher(tls->read_ctx, c, c, c_len);//解密
     if (ret <= 0) {
         printf("EVP_Cipher err\n");
         return A_TLS_ERR;
@@ -559,7 +560,9 @@ s32 a_tls_write(a_tls_t *tls, u8 *buf, u32 len)
         info.p = buf;
         info.p_len = s;
         info.type = A_TLS_RT_APPLICATION_DATA;
-        tls->sess->cipher->enc(tls, &info);
+        
+        tls->sess->cipher->enc(tls, &info); //用于最后阶段的数据加密
+        
         rc = info.c - A_TLS_HEAD_LEN;
 
         len -= s;

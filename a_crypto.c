@@ -137,7 +137,7 @@ a_cipher_t a_ciphers[] =
         "TLS_AES_128_GCM_SHA256",
         0x1301, NID_aes_128_gcm, 16, 12, 16, A_CRYPTO_NID_SHA256,
         A_CRYPTO_CIPHER_TLS1_3|A_CRYPTO_CIPHER_ECDHE|A_CRYPTO_CIPHER_GCM,
-        0,
+        A_CRYPTO_NID_RSA,
         NULL,NULL,
         a_tls13_enc_gcm, a_tls13_dec_gcm,
         NULL,NULL,NULL,
@@ -147,7 +147,7 @@ a_cipher_t a_ciphers[] =
         "TLS_AES_256_GCM_SHA384",
         0x1302, NID_aes_256_gcm, 32, 12, 16, A_CRYPTO_NID_SHA384,
         A_CRYPTO_CIPHER_TLS1_3|A_CRYPTO_CIPHER_ECDHE|A_CRYPTO_CIPHER_GCM,
-        0,
+        A_CRYPTO_NID_RSA,
         NULL,NULL,
         a_tls13_enc_gcm, a_tls13_dec_gcm,
         NULL,NULL,NULL,
@@ -893,9 +893,9 @@ s32 a_crypto_sm2_sign_openssl(void *arg, crypto_info_t *info)
     EVP_PKEY *ec_key;
     ECDSA_SIG *sig = NULL;
 
-    void *key  = info->async.key;
-    u8 *in     = info->async.tbs;
-    u32 in_len = info->async.tbs_len;
+    void *key  = info->async.key;//私钥
+    u8 *in     = info->async.tbs; //参数 加上随机数
+    u32 in_len = info->async.tbs_len; 
     u8  *out   = info->async.out;
     u32 *out_len = info->async.out_len;
 
@@ -930,10 +930,10 @@ s32 a_crypto_sm2_sign_openssl(void *arg, crypto_info_t *info)
 s32 a_crypto_sm2_dec_openssl(void *arg, crypto_info_t *info)
 {
     size_t outlen;
-    void *key  = info->async.key;
-    u8 *in     = info->async.tbs;
+    void *key  = info->async.key; //我的私钥
+    u8 *in     = info->async.tbs; //对方公钥
     u32 in_len = info->async.tbs_len;
-    u8  *out   = info->async.out;
+    u8  *out   = info->async.out; //pre master secret
     u32 *out_len = info->async.out_len;
 
     outlen = A_TLS_PRE_MASTER_KEY_LEN;
@@ -1025,7 +1025,7 @@ s32 a_crypto_rsa_sign_openssl(void *arg, crypto_info_t *info)
     *out_len = RSA_size(rsa);
 
     if (md) {
-        a_md_do_digest(md, in, in_len, tmp);
+        a_md_do_digest(md, in, in_len, tmp);//a_md_do_digest_openssl ,tmp为 out
         in = tmp;
         in_len = md->hash_size;
     }
@@ -1045,7 +1045,7 @@ s32 a_crypto_rsa_sign_openssl(void *arg, crypto_info_t *info)
     switch (mode)
     {
         case A_CRYPTO_RSA_PADDING_PSS:
-            light_rsa_add_pss_padding(md, in, in_len, encode, *out_len);
+            light_rsa_add_pss_padding(md, in, in_len, encode, *out_len); //encode 为输出
             break;
         case A_CRYPTO_RSA_PADDING_PKCS1:
             light_rsa_add_pkcs1_padding(md, in, in_len, encode, *out_len);

@@ -44,7 +44,7 @@ state_func tls_state_proc[A_TLS_STATE_MAX] =
     [A_TLS_STATE_GET_CLNT_CKE]      = a_tls_get_clnt_cke,
     [A_TLS_STATE_GET_CLNT_CCS]      = a_tls_get_clnt_ccs,
     [A_TLS_STATE_GET_CLNT_FINISH]   = a_tls_get_clnt_finished,
-    [A_TLS_STATE_SND_SRV_CCS]       = a_tls_snd_srv_ccs,
+    [A_TLS_STATE_SND_SRV_CCS]       = a_tls_snd_srv_ccs, //change cipher spec
     [A_TLS_STATE_SND_SRV_TICKET]    = a_tls_snd_srv_ticket,
     [A_TLS_STATE_SND_SRV_FINISH]    = a_tls_snd_srv_finished,
 };
@@ -121,6 +121,7 @@ s32 a_tls_process_cke(a_tls_t *tls, msg_t *msg)
     }
 
     /*Will generate master secret*/
+    //数据为客户端的 DH公钥 
     if (tls->sess->cipher->parse_cke((void*)tls, p, len2)
         != A_TLS_OK)
     {
@@ -367,6 +368,7 @@ s32 a_tls_snd_srv_done(a_tls_t *tls)
 
 s32 a_tls_get_ske_tbs(a_tls_t *tls, u8 *in, u32 in_len, u8 *tbs, u32 *tbs_len)
 {
+    
     memcpy(tbs, tls->handshake->clnt_random, A_TLS_RAND_SIZE);
     memcpy(tbs + A_TLS_RAND_SIZE, tls->handshake->srv_random, A_TLS_RAND_SIZE);
     memcpy(tbs + A_TLS_RAND_SIZE + A_TLS_RAND_SIZE, in, in_len);
@@ -469,18 +471,23 @@ s32 a_tls_snd_srv_ske(a_tls_t *tls)
     p += 3;
 
     sign_start = p;
-    *p++ = 0x03;/*named curve*/
+    //key exchange methods
+    *p++ = 0x03;    /*named curve*/ 
+
     s2n(tls->support_gp->tls_nid, p);
 
+    //第二个参数为私钥
     a_crypto_gen_ec_pub(
                  tls->support_gp,
                  &hs->self_ecdh_prv, &hs->self_ecdh_pub,
                  &hs->self_ecdh_prv_len, &hs->self_ecdh_pub_len);
 
     *p++ = hs->self_ecdh_pub_len;
+    //这个公钥self_ecdh_pub  包含 p ,g 和 Y_s(Ys = g ^X mod p)
     memcpy(p, hs->self_ecdh_pub, hs->self_ecdh_pub_len);
     p += hs->self_ecdh_pub_len;
 
+    //
     sign_len = (u32)(p - sign_start);
 
     sig = a_tls_select_sigalg(tls, &key, &md);
@@ -489,7 +496,7 @@ s32 a_tls_snd_srv_ske(a_tls_t *tls)
     if (tls->version == A_TLS_TLS_1_2_VERSION) {
         s2n(sig->tls_id, p);
     }
-
+    //copy 客户端随机数和服务端随机数  sign_start 包含{类型(1),公钥长度(1)，公钥本身} 以供后续签名
     a_tls_get_ske_tbs(tls, sign_start, sign_len, tbs, &tbs_len);
 #ifdef TLS_DEBUG
     {
@@ -509,7 +516,7 @@ s32 a_tls_snd_srv_ske(a_tls_t *tls)
     info.async.key = key;
     info.async.out = p+2;
     info.async.out_len = &len;
-
+    //执行签名
     if (sig->sign(NULL, &info) != A_TLS_OK) {
         a_tls_error(tls, "ske sign error");
         return A_TLS_ERR;
@@ -544,8 +551,11 @@ s32 a_tls_snd_srv_cert_gm(a_tls_t *tls)
 
     /*enc cert*/
     len = tls->cfg->der_len[A_CRYPTO_NID_SM][0];
+
     l2n3(len, p);
+    
     memcpy(p, tls->cfg->der[A_CRYPTO_NID_SM][0], len);
+    
     p += len;
 
     len = (u32)(p - a_tls_tmp_msg_buf);
@@ -570,12 +580,15 @@ s32 a_tls_snd_srv_cert(a_tls_t *tls)
     p += 3;
 
     index = tls->selected_cert;
-
+    //握手的证书 对应的证书链长度
     len = tls->cfg->chain_len[index];
     l2n3(len, p);
+
+    //DER格式 我们的证书 对应的证书链
     memcpy(p, tls->cfg->chain[index], len);
     p += len;
 
+    //长度
     len = (u32)(p - a_tls_tmp_msg_buf);
     l2n3((len - 4), l);
 
@@ -589,7 +602,7 @@ s32 a_tls_snd_srv_hello(a_tls_t *tls)
     s32 len;
     u8 *p = a_tls_tmp_msg_buf, *l;
 
-    *p++ = A_TLS_MT_SRV_HELLO;
+    *p++ = A_TLS_MT_SRV_HELLO;//Message Type
     l = p;
     p += 3;
 
@@ -636,18 +649,19 @@ s32 a_tls_get_clnt_hello(a_tls_t *tls)
     if (ret != A_TLS_OK) {
         return ret;
     }
-
+    //设置扩展
     ret = a_tls_process_clnt_hello(tls, &msg);
     if (ret != A_TLS_OK) {
         return ret;
     }
 
     tls->state = A_TLS_STATE_SND_SRV_HELLO;
-
+    //下面都是 TLS 1.3 专属
     if (!IS_TLS13(tls)) {
         return A_TLS_OK;
     }
 
+    //tls->sig 是存在扩展里面的
     if (tls->sig == NULL) {
         a_tls_error(tls, "clnt sig err");
         return A_TLS_ERR;

@@ -507,7 +507,7 @@ s32 a_tls13_snd_srv_hello(a_tls_t *tls)
         a_tls_error(tls, "tls13 srv hello ext new error");
         return A_TLS_ERR;
     }
-
+    
     s2n(len, p);
     p += len;
 

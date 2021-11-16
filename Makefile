@@ -1,5 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -O -g -fPIC -I./
+cryptodir=/home/fashion/project/openssl/install/
+CFLAGS = -Wall -O -g -fPIC -I./ 
 SCFLAGS= -shared -fPIC
 LDFLAG = -lcrypto
 OBJS   = a_crypto.o a_kdf.o a_tls13.o a_tls.o a_tls_cipher.o a_tls_extension.o a_tls_lib.o 
@@ -22,11 +23,10 @@ else
 cmd = gcc $(CFLAGS) ./daemon/$(BINSRC).c -o $(BINSRC) $(TARGET).a $(LDFLAG)
 endif
 
-all: static shared bin
-
+all: static bin 
+	cp $(BINSRC) server
 $(OBJS):$(SRC)
 	$(CC) $(CFLAGS) -c $(SRC)
-
 static:$(OBJS)
 	ar rcs $(TARGET).a $(OBJS)
 
@@ -35,5 +35,6 @@ shared:$(OBJS)
 
 bin:
 	$(cmd)
+	rm -f *.o *.so
 clean:
-	rm -f *.o *.so *.a $(BINSRC)
+	rm -f *.o *.so

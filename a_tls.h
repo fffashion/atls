@@ -347,8 +347,8 @@ struct a_tls {
     a_tls_buf_t         *saved_app;
     state_func          *state_proc;
     method_t            *spec;
-    void                *write_ctx;
-    void                *read_ctx;
+    void                *write_ctx; //EVP_CIPHER_CTX 
+    void                *read_ctx; //EVP_CIPHER_CTX
     a_group_t           *group;
     sigalg_pair_t       *sig;
     a_group_t           *support_gp;

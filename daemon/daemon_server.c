@@ -2,14 +2,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <stdarg.h>
+#include <signal.h>
+#include <execinfo.h>
 #include <unistd.h>
 #include <a_crypto.h>
 #include <a_tls.h>
 
+
 unsigned char buf[1024];
-unsigned short port = 44444;
+unsigned short port = 4443;
 #define replay "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 23\r\nServer: mrpre\r\n\r\nWelcome to mrpre's Home"
 /*Simple A_TLS server*/
+
+#define BACKTRACE_SIZE 256
+void segv_handler(int sig)
+{
+    void *func[BACKTRACE_SIZE];
+    // char **symb = NULL;
+    int size;
+    size = backtrace(func, BACKTRACE_SIZE);
+    backtrace_symbols_fd(func, size, STDERR_FILENO);
+    exit(1);
+}
+
 int main(int argc, char **argv)
 {
     struct sockaddr_in server_addr;
@@ -17,6 +33,7 @@ int main(int argc, char **argv)
     a_tls_cfg_t *cfg;
     a_tls_t *tls;
     struct timeval timeout={3,0};//3s
+    signal(SIGSEGV, segv_handler);
 
     a_tls_init_env();
     bzero(&server_addr,sizeof(server_addr));
@@ -50,53 +67,53 @@ int main(int argc, char **argv)
     }
 
     printf("Setting ECC certificate\n");
-    if (!a_tls_cfg_set_key(cfg, "./cert/ecc.key")) {
+    if (!a_tls_cfg_set_key(cfg, "/home/fashion/project/atls/cert/ecc.key")) {
         printf("a_tls_cfg_set_key ecc.key error\n");
         exit(-2);
     }
 
-    if (!a_tls_cfg_set_cert(cfg, "./cert/ecc.pem")) {
+    if (!a_tls_cfg_set_cert(cfg, "/home/fashion/project/atls/cert/ecc.pem")) {
         printf("a_tls_cfg_set_cert ecc.pem error\n");
         exit(-2);
     }
 
     printf("Setting RSA certificate\n");
-    if (!a_tls_cfg_set_key(cfg, "./cert/rsa.key")) {
+    if (!a_tls_cfg_set_key(cfg, "/home/fashion/project/atls/cert/rsa.key")) {
        printf("a_tls_cfg_set_key rsa.key error\n");
        exit(-2);
     }
 
-    if (!a_tls_cfg_set_cert(cfg, "./cert/rsa.pem")) {
+    if (!a_tls_cfg_set_cert(cfg, "/home/fashion/project/atls/cert/rsa.pem")) {
         printf("a_tls_cfg_set_cert rsa.pem error\n");
         exit(-2);
     }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10101003L
+// #if OPENSSL_VERSION_NUMBER >= 0x10101003L
     printf("Setting SM2 certificate\n");
     /*Now Setting ENC param*/
-    if (!a_tls_cfg_set_key(cfg, "./cert/sm2.key")) {
+    if (!a_tls_cfg_set_key(cfg, "/home/fashion/project/atls/cert/sm2.key")) {
        printf("a_tls_cfg_set_key sm2.key error\n");
        exit(-2);
     }
 
-    if (!a_tls_cfg_set_cert(cfg, "./cert/sm2.pem")) {
+    if (!a_tls_cfg_set_cert(cfg, "/home/fashion/project/atls/cert/sm2.pem")) {
         printf("a_tls_cfg_set_cert sm2.pem error\n");
         exit(-2);
     }
 
     /*Now Setting SIGN param*/
-    if (!a_tls_cfg_set_sign_key(cfg, "./cert/sm2.key")) {
+    if (!a_tls_cfg_set_sign_key(cfg, "/home/fashion/project/atls/cert/sm2.key")) {
        printf("a_tls_cfg_set_key sm2.key error\n");
        exit(-2);
     }
 
-    if (!a_tls_cfg_set_sign_cert(cfg, "./cert/sm2.pem")) {
+    if (!a_tls_cfg_set_sign_cert(cfg, "/home/fashion/project/atls/cert/sm2.pem")) {
         printf("a_tls_cfg_set_cert sm2.pem error\n");
         exit(-2);
     }
-#else
-    printf("Warning: GM SSL is not supported\n");
-#endif
+// #else
+//     printf("Warning: GM SSL is not supported\n");
+// #endif
 
     for (;;) {
         struct sockaddr_in client_addr;
@@ -110,8 +127,10 @@ int main(int argc, char **argv)
             printf("accept error\n");
             exit(-2);
         }
+
         printf("process New client\n");
-        tls = a_tls_new(cfg);
+        
+        tls = a_tls_new(cfg); //这里设置tls->support_group
         if (tls == NULL) {
             close(listen_fd);
             printf("a_tls_new error\n");
@@ -121,6 +140,7 @@ int main(int argc, char **argv)
         setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
         a_tls_set_fd(tls, client_fd);
+
         if (a_tls_handshake(tls) != 0) {
             printf("a_tls_handshake error\n");
             goto next;
